@@ -11,5 +11,5 @@ Uses certstream-go to obtain an updated certificate for a domain, verify if it i
 ## Usage
 
 ```bash
-    ./RealTime -l host.txt -c CHAT_ID -t BOT_TOKEN & disown
+    RealTime -l host.txt -c CHAT_ID -t BOT_TOKEN & disown
 ```
