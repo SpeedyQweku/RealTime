@@ -24,7 +24,7 @@ var (
 
 func init() {
 	flagSet := goflags.NewFlagSet()
-	flagSet.SetDescription("RealTime, uses certstrem to find targeted subdmain")
+	flagSet.SetDescription("RealTime, uses certstrem to find targeted subdomain")
 	flagSet.CreateGroup("input", "INPUT",
 		flagSet.StringVarP(&domainsFile, "list", "l", "", "File containing domains"),
 		flagSet.StringVar(&domain, "d", "", "String domain"),
