@@ -1,4 +1,4 @@
-zgithub.com/CaliDog/certstream-go v0.0.0-20200713031452-eca7997412f1 h1:P2kAob5k67YLNGJg0C6Wg0nTLrUpIxYvpPFVrk1y1PQ=
+github.com/CaliDog/certstream-go v0.0.0-20200713031452-eca7997412f1 h1:P2kAob5k67YLNGJg0C6Wg0nTLrUpIxYvpPFVrk1y1PQ=
 github.com/CaliDog/certstream-go v0.0.0-20200713031452-eca7997412f1/go.mod h1:JBo69gi8JyPpZoLZgmZeXiq4o7Ib2qf2RiIxiWC0oYQ=
 github.com/andybalholm/brotli v1.0.1/go.mod h1:loMXtMfwqflxFJPmdbJO0a3KNoPuLBgiu3qAvBg8x/Y=
 github.com/andybalholm/brotli v1.0.6 h1:Yf9fFpf49Zrxb9NlQaluyE92/+X7UVHlhMNJN2sxfOI=
