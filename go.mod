@@ -5,7 +5,6 @@ go 1.21.5
 require (
 	github.com/CaliDog/certstream-go v0.0.0-20200713031452-eca7997412f1
 	github.com/go-telegram-bot-api/telegram-bot-api v4.6.4+incompatible
-	github.com/op/go-logging v0.0.0-20160315200505-970db520ece7
 	github.com/projectdiscovery/goflags v0.1.36
 	github.com/projectdiscovery/gologger v1.1.12
 )
