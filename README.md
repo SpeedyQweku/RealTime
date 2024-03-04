@@ -11,5 +11,19 @@ Uses certstream-go to obtain an updated certificate for a domain, verify if it i
 ## Usage
 
 ```bash
-    RealTime -l host.txt -c CHAT_ID -t BOT_TOKEN & disown
+RealTime,locate subdomains and the subdomains of the targeted organization
+
+INPUT:
+   -t string  Bot token
+   -c int     Chat ID
+
+PROBES:
+   -l, -list string   File containing domains you want to get their subdomains
+   -d string[]        Domains you want to get their subdomains, (e.g., 'example.com,example.org')
+   -org, -O string[]  Organization you are targeting for subdomains, (e.g., 'Let's Encrypt,Amazon')
+
+DEBUG:
+   -v, -verbose  verbose mode
+   -silent       silent mode (default true)
+
 ```
