@@ -12,28 +12,36 @@ import (
 	"github.com/projectdiscovery/gologger"
 )
 
-var (
-	// log         = logging.MustGetLogger("example")
-	domainsFile string
-	domain      string
-	btoken      string
-	chatid      int
-	verbose     bool
-	silent		bool
-)
+type Config struct {
+	Chatid      int
+	Verbose     bool
+	Silent      bool
+	All_domain  bool
+	Btoken      string
+	DomainsFile string
+	Org         goflags.StringSlice
+	Domain      goflags.StringSlice
+	DomainList  map[string]struct{}
+	OrgList     map[string]struct{}
+}
+
+var cfg Config
 
 func init() {
 	flagSet := goflags.NewFlagSet()
-	flagSet.SetDescription("RealTime, uses certstrem to find targeted subdomain")
+	flagSet.SetDescription("RealTime,locate subdomains and the subdomains of the targeted organization")
 	flagSet.CreateGroup("input", "INPUT",
-		flagSet.StringVarP(&domainsFile, "list", "l", "", "File containing domains"),
-		flagSet.StringVar(&domain, "d", "", "String domain"),
-		flagSet.StringVar(&btoken, "t", "", "Bot token"),
-		flagSet.IntVar(&chatid, "c", 0, "Chat ID"),
+		flagSet.StringVar(&cfg.Btoken, "t", "", "Bot token"),
+		flagSet.IntVar(&cfg.Chatid, "c", 0, "Chat ID"),
+	)
+	flagSet.CreateGroup("probes", "PROBES",
+		flagSet.StringVarP(&cfg.DomainsFile, "list", "l", "", "File containing domains you want to get their subdomains"),
+		flagSet.StringSliceVar(&cfg.Domain, "d", nil, "Domains you want to get their subdomains, (e.g., 'example.com,example.org')", goflags.CommaSeparatedStringSliceOptions),
+		flagSet.StringSliceVarP(&cfg.Org, "O", "org", nil, "Organization you are targeting for subdomains, (e.g., 'Let's Encrypt,Amazon')", goflags.CommaSeparatedStringSliceOptions),
 	)
 	flagSet.CreateGroup("debug", "DEBUG",
-		flagSet.BoolVarP(&verbose, "verbose", "v", false, "verbose mode"),
-		flagSet.BoolVar(&silent, "silent", true, "silent mode"),
+		flagSet.BoolVarP(&cfg.Verbose, "verbose", "v", false, "verbose mode"),
+		flagSet.BoolVar(&cfg.Silent, "silent", true, "silent mode"),
 	)
 	_ = flagSet.Parse()
 }
@@ -63,7 +71,7 @@ func sendMessage(btoken string, chatID int64, message string) {
 	msg := tgbotapi.NewMessage(chatID, message)
 	_, err = bot.Send(msg)
 	if err != nil {
-		silentModeEr(silent,err)
+		silentModeEr(cfg.Silent, err)
 	}
 }
 
@@ -75,13 +83,13 @@ func domainEndsWith(certDomain string, targetDomain string) bool {
 
 func certStreamer(domainList map[string]struct{}) {
 	currentTime := time.Now().Format("2006-01-02 15:04:05")
-	msg := "[INFO:websocket] " + currentTime + "- Websocket connected\n[INFO:certstream] " + currentTime + " - Connection established to CertStream! Listening for events..."
-	if verbose {
+	msg := "[\033[34mINF:websocket\033[0m] " + currentTime + "- Websocket connected\n[\033[34mINF:certstream\033[0m] " + currentTime + " - Connection established to CertStream! Listening for events..."
+	if cfg.Verbose {
 		gologger.Print().Msg(msg)
 	}
-	tch := teleCheck(btoken, chatid)
+	tch := teleCheck(cfg.Btoken, cfg.Chatid)
 	if tch {
-		sendMessage(btoken, int64(chatid), msg)
+		sendMessage(cfg.Btoken, int64(cfg.Chatid), msg)
 	}
 
 	stream, errStream := certstream.CertStreamEventStream(false)
@@ -98,11 +106,11 @@ func certStreamer(domainList map[string]struct{}) {
 						for _, domains := range allDomains {
 							for trg := range domainList {
 								if domainEndsWith(domains.(string), trg) {
-									if verbose {
+									if cfg.Verbose {
 										gologger.Print().Msg(domains.(string))
 									}
 									if tch {
-										sendMessage(btoken, int64(chatid), domains.(string))
+										sendMessage(cfg.Btoken, int64(cfg.Chatid), domains.(string))
 									}
 								}
 							}
@@ -111,7 +119,57 @@ func certStreamer(domainList map[string]struct{}) {
 				}
 			}
 		case err := <-errStream:
-			silentModeEr(silent,err)
+			silentModeEr(cfg.Silent, err)
+		}
+	}
+}
+
+func orgStreamer(orgList map[string]struct{}) {
+	currentTime := time.Now().Format("2006-01-02 15:04:05")
+	msg := "[\033[34mINF:websocket\033[0m] " + currentTime + "- Websocket connected\n[\033[34mINF:certstream\033[0m] " + currentTime + " - Connection established to CertStream! Listening for events..."
+	if cfg.Verbose {
+		gologger.Print().Msg(msg)
+	}
+	tch := teleCheck(cfg.Btoken, cfg.Chatid)
+	if tch {
+		sendMessage(cfg.Btoken, int64(cfg.Chatid), msg)
+	}
+	stream, errStream := certstream.CertStreamEventStream(false)
+	for {
+		select {
+		case jq := <-stream:
+			messageType, _ := jq.String("message_type")
+			if messageType == "certificate_update" {
+				data, _ := jq.Object("data")
+				leafCert, ok := data["leaf_cert"].(map[string]interface{})
+				if ok {
+					issuer, ok := leafCert["issuer"].(map[string]interface{})
+					if ok {
+						for key, value := range issuer {
+							if key == "O" {
+								for orgTrg := range orgList {
+									if value == orgTrg {
+										allDomains, ok := leafCert["all_domains"].([]interface{})
+										if ok {
+											// fmt.Printf("Value: %v\n", value)
+											for _, domains := range allDomains {
+												if cfg.Verbose {
+													gologger.Print().Msg(domains.(string))
+												}
+												if tch {
+													sendMessage(cfg.Btoken, int64(cfg.Chatid), domains.(string))
+												}
+											}
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		case err := <-errStream:
+			silentModeEr(cfg.Silent, err)
 		}
 	}
 }
@@ -125,43 +183,51 @@ func teleCheck(btoken string, chatid int) bool {
 }
 
 func silentModeEr(silent bool, message error) {
-	if !silent{
+	if !silent {
 		gologger.Error().Msgf("%v", message)
 	}
 }
 
 func main() {
-	var domainList map[string]struct{}
-
-	tch := teleCheck(btoken, chatid)
+	tch := teleCheck(cfg.Btoken, cfg.Chatid)
 	if tch {
 		gologger.Info().Msg("Telegram Bot Enabled")
 	} else {
 		gologger.Info().Msg("Telegram Bot Disabled")
 	}
 
-	if verbose {
+	if cfg.Verbose {
 		gologger.Info().Msg("Verbose Mode Enabled")
 	} else {
 		gologger.Info().Msg("Verbose Mode Disabled")
 	}
 
-	if domainsFile == "" && domain == "" {
-		gologger.Fatal().Msg("Please specify domain or list using -l/-list and -d")
+	if cfg.DomainsFile == "" && len(cfg.Domain) == 0 && len(cfg.Org) == 0 {
+		gologger.Fatal().Msg("Please specify domains/list or org using -l/-list and -d and -org/-O")
 	}
 
-	if domainsFile != "" {
-		lines, err := readLines(domainsFile)
+	cfg.DomainList = make(map[string]struct{})
+	if cfg.DomainsFile != "" {
+		lines, err := readLines(cfg.DomainsFile)
 		if err != nil {
 			gologger.Fatal().Msgf("Error reading domains file: %v", err)
 		}
-		domainList = make(map[string]struct{})
 		for _, line := range lines {
-			domainList[line] = struct{}{}
+			cfg.DomainList[line] = struct{}{}
 		}
-		certStreamer(domainList)
-	} else if domain != "" {
-		domainList = map[string]struct{}{domain: {}}
-		certStreamer(domainList)
+		certStreamer(cfg.DomainList)
+	} else if len(cfg.Domain) > 0 {
+		for _, domain := range cfg.Domain {
+			cfg.DomainList[domain] = struct{}{}
+		}
+		certStreamer(cfg.DomainList)
+	}
+
+	if len(cfg.Org) > 0 {
+		cfg.OrgList = make(map[string]struct{})
+		for _, org := range cfg.Org {
+			cfg.OrgList[org] = struct{}{}
+		}
+		orgStreamer(cfg.OrgList)
 	}
 }
