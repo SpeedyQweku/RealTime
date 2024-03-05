@@ -5,7 +5,7 @@ Uses certstream-go to obtain an updated certificate for a domain, verify if it i
 ## Installation
 
 ```bash
-go install github.com/SpeedyQweku/RealTime@v0.0.1
+go install github.com/SpeedyQweku/RealTime@v0.0.2
 ```
 
 ## Config
