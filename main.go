@@ -20,9 +20,9 @@ type TeleInfo struct {
 }
 
 type Config struct {
-	Chatid  int
-	Verbose bool
-	Silent  bool
+	Chatid         int
+	Verbose        bool
+	Silent         bool
 	SendTeleConfig bool
 	Btoken         string
 	DomainsFile    string
@@ -132,8 +132,8 @@ func domainEndsWith(certDomain string, targetDomain string) bool {
 
 func certStreamer(domainList map[string]struct{}) {
 	currentTime := time.Now().Format("2006-01-02 15:04:05")
-	msg := "[\033[34mINF:websocket\033[0m] " + currentTime + "- Websocket connected\n[\033[34mINF:certstream\033[0m] " + currentTime + " - Connection established to CertStream! Listening for events..."
-	msgtg := "[INF:websocket] " + currentTime + "- Websocket connected\n[INF:certstream] " + currentTime + " - Connection established to CertStream! Listening for events..."
+	msg := "[\033[34mINF:websocket\033[0m] " + currentTime + " - Websocket connected\n[\033[34mINF:certstream\033[0m] " + currentTime + " - Connection established to CertStream! Listening for events..."
+	msgtg := "[INF:websocket] " + currentTime + " - Websocket connected\n[INF:certstream] " + currentTime + " - Connection established to CertStream! Listening for events..."
 	if cfg.Verbose {
 		gologger.Print().Msg(msg)
 	}
@@ -185,8 +185,8 @@ func certStreamer(domainList map[string]struct{}) {
 
 func orgStreamer(orgList map[string]struct{}) {
 	currentTime := time.Now().Format("2006-01-02 15:04:05")
-	msg := "[\033[34mINF:websocket\033[0m] " + currentTime + "- Websocket connected\n[\033[34mINF:certstream\033[0m] " + currentTime + " - Connection established to CertStream! Listening for events..."
-	msgtg := "[INF:websocket] " + currentTime + "- Websocket connected\n[INF:certstream] " + currentTime + " - Connection established to CertStream! Listening for events..."
+	msg := "[\033[34mINF:websocket\033[0m] " + currentTime + " - Websocket connected\n[\033[34mINF:certstream\033[0m] " + currentTime + " - Connection established to CertStream! Listening for events..."
+	msgtg := "[INF:websocket] " + currentTime + " - Websocket connected\n[INF:certstream] " + currentTime + " - Connection established to CertStream! Listening for events..."
 	if cfg.Verbose {
 		gologger.Print().Msg(msg)
 	}
@@ -289,25 +289,30 @@ func main() {
 	)
 	_ = flagSet.Parse()
 
-	_, _, tfch := teleFileCheck()
-	tch := teleCheck(cfg.Btoken, cfg.Chatid)
-	if tch {
-		gologger.Print().Msgf("[\033[33mWRN\033[0m] Kindly Use The Config File [%s]", cfg.FilePath)
-		gologger.Info().Msg("Telegram Bot Enabled")
-	} else if tfch {
-		gologger.Info().Msg("Telegram Bot Enabled")
-	} else {
-		gologger.Info().Msg("Telegram Bot Disabled")
-	}
-
 	if cfg.Verbose {
-		gologger.Info().Msg("Verbose Mode Enabled")
-	} else {
-		gologger.Info().Msg("Verbose Mode Disabled")
-	}
+		_, _, tfch := teleFileCheck()
+		tch := teleCheck(cfg.Btoken, cfg.Chatid)
+		if tch {
+			gologger.Print().Msgf("[\033[33mWRN\033[0m] Kindly Use The Config File [%s]", cfg.FilePath)
+			gologger.Info().Msg("Telegram Bot Enabled")
+		} else if tfch {
+			gologger.Info().Msg("Telegram Bot Enabled")
+		} else {
+			gologger.Info().Msg("Telegram Bot Disabled")
+		}
 
-	if cfg.DomainsFile == "" && len(cfg.Domain) == 0 && len(cfg.Org) == 0 {
-		gologger.Fatal().Msg("Please specify domains/list or org using -l/-list and -d and -org/-O")
+		if len(cfg.Org) > 0 {
+			gologger.Info().Msgf("Organization: %v", cfg.Org)
+		}
+		if len(cfg.Domain) > 0 {
+			gologger.Info().Msgf("Domain: %v", cfg.Domain)
+		}
+
+		if cfg.DomainsFile == "" && len(cfg.Domain) == 0 && len(cfg.Org) == 0 {
+			gologger.Fatal().Msg("Please specify domains/list or org using -l/-list and -d and -org/-O")
+		} else if (cfg.DomainsFile != "" || len(cfg.Domain) > 0) && len(cfg.Org) > 0 {
+			gologger.Fatal().Msg("Can't use -l/-list and -d and -org/-O at the same time")
+		}
 	}
 
 	cfg.DomainList = make(map[string]struct{})
