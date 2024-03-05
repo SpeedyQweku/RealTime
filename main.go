@@ -2,7 +2,9 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -12,38 +14,85 @@ import (
 	"github.com/projectdiscovery/gologger"
 )
 
+type TeleInfo struct {
+	ChatidConf string `json:"chatid"`
+	TokenConf  string `json:"token"`
+}
+
 type Config struct {
-	Chatid      int
-	Verbose     bool
-	Silent      bool
-	All_domain  bool
-	Btoken      string
-	DomainsFile string
-	Org         goflags.StringSlice
-	Domain      goflags.StringSlice
-	DomainList  map[string]struct{}
-	OrgList     map[string]struct{}
+	Chatid  int
+	Verbose bool
+	Silent  bool
+	SendTeleConfig bool
+	Btoken         string
+	DomainsFile    string
+	FilePath       string
+	Org            goflags.StringSlice
+	Domain         goflags.StringSlice
+	DomainList     map[string]struct{}
+	OrgList        map[string]struct{}
 }
 
 var cfg Config
 
 func init() {
-	flagSet := goflags.NewFlagSet()
-	flagSet.SetDescription("RealTime,locate subdomains and the subdomains of the targeted organization")
-	flagSet.CreateGroup("input", "INPUT",
-		flagSet.StringVar(&cfg.Btoken, "t", "", "Bot token"),
-		flagSet.IntVar(&cfg.Chatid, "c", 0, "Chat ID"),
-	)
-	flagSet.CreateGroup("probes", "PROBES",
-		flagSet.StringVarP(&cfg.DomainsFile, "list", "l", "", "File containing domains you want to get their subdomains"),
-		flagSet.StringSliceVar(&cfg.Domain, "d", nil, "Domains you want to get their subdomains, (e.g., 'example.com,example.org')", goflags.CommaSeparatedStringSliceOptions),
-		flagSet.StringSliceVarP(&cfg.Org, "O", "org", nil, "Organization you are targeting for subdomains, (e.g., 'Let's Encrypt,Amazon')", goflags.CommaSeparatedStringSliceOptions),
-	)
-	flagSet.CreateGroup("debug", "DEBUG",
-		flagSet.BoolVarP(&cfg.Verbose, "verbose", "v", false, "verbose mode"),
-		flagSet.BoolVar(&cfg.Silent, "silent", true, "silent mode"),
-	)
-	_ = flagSet.Parse()
+	// Get the user's home directory
+	hDir, err := os.UserHomeDir()
+	if err != nil {
+		gologger.Error().Msgf("Error getting user's home directory: %s", err)
+		return
+	}
+	// Specify the folder path and file name
+	folderPath := hDir + "/.config/RealTime"
+	fileName := "config.json"
+	cfg.FilePath = folderPath + "/" + fileName
+	// Check if the folder exists, and create it if not
+	if _, err := os.Stat(folderPath); os.IsNotExist(err) {
+		err := os.MkdirAll(folderPath, 0755)
+		if err != nil {
+			gologger.Error().Msgf("Error creating folder: %s", err)
+			return
+		}
+	}
+	// Check if the file exists
+	if _, err := os.Stat(cfg.FilePath); os.IsNotExist(err) {
+		// File does not exist, create a default config
+		teleinfo := TeleInfo{
+			ChatidConf: "",
+			TokenConf:  "",
+		}
+		// Marshal the config to JSON
+		configJSON, err := json.MarshalIndent(teleinfo, "", "    ")
+		if err != nil {
+			gologger.Error().Msgf("Error marshaling config: %s", err)
+			return
+		}
+		// Write the config to the file
+		err = os.WriteFile(cfg.FilePath, configJSON, 0644)
+		if err != nil {
+			gologger.Error().Msgf("Error writing config file: %s", err)
+			return
+		}
+	}
+}
+
+func readTeleInfo() (token, chatid string) {
+	// Read the config file
+	configFile, err := os.ReadFile(cfg.FilePath)
+	if err != nil {
+		gologger.Fatal().Msgf("Error reading config file: %s", err)
+		return "", ""
+	}
+
+	// Unmarshal the JSON into a Config struct
+	var teleinfo TeleInfo
+	err = json.Unmarshal(configFile, &teleinfo)
+	if err != nil {
+		gologger.Fatal().Msgf("Error unmarshaling config: %s", err)
+		return "", ""
+	}
+
+	return teleinfo.TokenConf, teleinfo.ChatidConf
 }
 
 func readLines(filePath string) ([]string, error) {
@@ -84,12 +133,18 @@ func domainEndsWith(certDomain string, targetDomain string) bool {
 func certStreamer(domainList map[string]struct{}) {
 	currentTime := time.Now().Format("2006-01-02 15:04:05")
 	msg := "[\033[34mINF:websocket\033[0m] " + currentTime + "- Websocket connected\n[\033[34mINF:certstream\033[0m] " + currentTime + " - Connection established to CertStream! Listening for events..."
+	msgtg := "[INF:websocket] " + currentTime + "- Websocket connected\n[INF:certstream] " + currentTime + " - Connection established to CertStream! Listening for events..."
 	if cfg.Verbose {
 		gologger.Print().Msg(msg)
 	}
+	infToken, infChatid, tfch := teleFileCheck()
 	tch := teleCheck(cfg.Btoken, cfg.Chatid)
 	if tch {
-		sendMessage(cfg.Btoken, int64(cfg.Chatid), msg)
+		sendMessage(cfg.Btoken, int64(cfg.Chatid), msgtg)
+	} else {
+		if tfch {
+			sendMessage(infToken, infChatid, msgtg)
+		}
 	}
 
 	stream, errStream := certstream.CertStreamEventStream(false)
@@ -111,6 +166,10 @@ func certStreamer(domainList map[string]struct{}) {
 									}
 									if tch {
 										sendMessage(cfg.Btoken, int64(cfg.Chatid), domains.(string))
+									} else {
+										if tfch {
+											sendMessage(infToken, infChatid, domains.(string))
+										}
 									}
 								}
 							}
@@ -127,12 +186,18 @@ func certStreamer(domainList map[string]struct{}) {
 func orgStreamer(orgList map[string]struct{}) {
 	currentTime := time.Now().Format("2006-01-02 15:04:05")
 	msg := "[\033[34mINF:websocket\033[0m] " + currentTime + "- Websocket connected\n[\033[34mINF:certstream\033[0m] " + currentTime + " - Connection established to CertStream! Listening for events..."
+	msgtg := "[INF:websocket] " + currentTime + "- Websocket connected\n[INF:certstream] " + currentTime + " - Connection established to CertStream! Listening for events..."
 	if cfg.Verbose {
 		gologger.Print().Msg(msg)
 	}
 	tch := teleCheck(cfg.Btoken, cfg.Chatid)
+	infToken, infChatid, tfch := teleFileCheck()
 	if tch {
-		sendMessage(cfg.Btoken, int64(cfg.Chatid), msg)
+		sendMessage(cfg.Btoken, int64(cfg.Chatid), msgtg)
+	} else {
+		if tfch {
+			sendMessage(infToken, infChatid, msgtg)
+		}
 	}
 	stream, errStream := certstream.CertStreamEventStream(false)
 	for {
@@ -143,9 +208,9 @@ func orgStreamer(orgList map[string]struct{}) {
 				data, _ := jq.Object("data")
 				leafCert, ok := data["leaf_cert"].(map[string]interface{})
 				if ok {
-					issuer, ok := leafCert["issuer"].(map[string]interface{})
+					subOrg, ok := leafCert["subject"].(map[string]interface{})
 					if ok {
-						for key, value := range issuer {
+						for key, value := range subOrg {
 							if key == "O" {
 								for orgTrg := range orgList {
 									if value == orgTrg {
@@ -158,6 +223,10 @@ func orgStreamer(orgList map[string]struct{}) {
 												}
 												if tch {
 													sendMessage(cfg.Btoken, int64(cfg.Chatid), domains.(string))
+												} else {
+													if tfch {
+														sendMessage(infToken, infChatid, domains.(string))
+													}
 												}
 											}
 										}
@@ -182,6 +251,19 @@ func teleCheck(btoken string, chatid int) bool {
 	}
 }
 
+func teleFileCheck() (string, int64, bool) {
+	if cfg.SendTeleConfig {
+		infoToken, infoChatidstr := readTeleInfo()
+		infoChatid, _ := strconv.ParseInt(infoChatidstr, 10, 64)
+		if infoToken != "" && infoChatid != 0 {
+			return infoToken, infoChatid, true
+		}
+	} else {
+		return "", 0, false
+	}
+	return "", 0, false
+}
+
 func silentModeEr(silent bool, message error) {
 	if !silent {
 		gologger.Error().Msgf("%v", message)
@@ -189,8 +271,30 @@ func silentModeEr(silent bool, message error) {
 }
 
 func main() {
+	flagSet := goflags.NewFlagSet()
+	flagSet.SetDescription("RealTime,locate subdomains and the subdomains of the targeted organization")
+	flagSet.CreateGroup("input", "INPUT",
+		flagSet.BoolVar(&cfg.SendTeleConfig, "st", false, "Send results to telegram using the config file (default false)"),
+		flagSet.StringVar(&cfg.Btoken, "t", "", "Telegram Bot Token"),
+		flagSet.IntVar(&cfg.Chatid, "c", 0, "Telegram Chat ID"),
+	)
+	flagSet.CreateGroup("probes", "PROBES",
+		flagSet.StringVarP(&cfg.DomainsFile, "list", "l", "", "File containing domains you want to get their subdomains"),
+		flagSet.StringSliceVar(&cfg.Domain, "d", nil, "Domains you want to get their subdomains, (e.g., 'example.com','example.org')", goflags.CommaSeparatedStringSliceOptions),
+		flagSet.StringSliceVarP(&cfg.Org, "O", "org", nil, "Organization you are targeting for subdomains, (e.g., 'Microsoft Corporation,Amazon','Cisco Systems Inc.')", goflags.CommaSeparatedStringSliceOptions),
+	)
+	flagSet.CreateGroup("debug", "DEBUG",
+		flagSet.BoolVarP(&cfg.Verbose, "verbose", "v", false, "verbose mode (default false)"),
+		flagSet.BoolVar(&cfg.Silent, "silent", true, "silent mode"),
+	)
+	_ = flagSet.Parse()
+
+	_, _, tfch := teleFileCheck()
 	tch := teleCheck(cfg.Btoken, cfg.Chatid)
 	if tch {
+		gologger.Print().Msgf("[\033[33mWRN\033[0m] Kindly Use The Config File [%s]", cfg.FilePath)
+		gologger.Info().Msg("Telegram Bot Enabled")
+	} else if tfch {
 		gologger.Info().Msg("Telegram Bot Enabled")
 	} else {
 		gologger.Info().Msg("Telegram Bot Disabled")
