@@ -272,7 +272,7 @@ func silentModeEr(silent bool, message error) {
 
 func main() {
 	flagSet := goflags.NewFlagSet()
-	flagSet.SetDescription("RealTime,locate subdomains and the subdomains of the targeted organization")
+	flagSet.SetDescription("RealTime, locate domains and subdomains of an organization")
 	flagSet.CreateGroup("input", "INPUT",
 		flagSet.BoolVar(&cfg.SendTeleConfig, "st", false, "Send results to telegram using the config file (default false)"),
 		flagSet.StringVar(&cfg.Btoken, "t", "", "Telegram Bot Token"),
