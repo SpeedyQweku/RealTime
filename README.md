@@ -1,6 +1,6 @@
 # RealTime
 
-Uses certstream-go to obtain an updated certificate for a domain, verify if it is included in the target domains, and then send it to Telegram.
+Uses certstream-go to obtain any updated certificate for a domain, verify if it is included in the target domains, and then send it to Telegram.
 
 ## Installation
 
@@ -24,7 +24,7 @@ It contains chatID and token for telegram to be used with the binary, a default 
 ## Usage
 
 ```bash
-RealTime,locate subdomains and the subdomains of the targeted organization
+RealTime, locate domains and subdomains of an organization
 
 INPUT:
    -st        Send results to telegram using the config file (default false)
